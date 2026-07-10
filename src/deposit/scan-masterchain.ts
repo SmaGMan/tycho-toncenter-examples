@@ -3,6 +3,8 @@ import type { DepositMatch } from "./filter-deposit";
 import { isDepositTransaction, toDepositMatch } from "./filter-deposit";
 import { readCheckpoint, writeCheckpoint } from "./checkpoint";
 
+const TRANSACTIONS_PAGE_LIMIT = 100;
+
 export type ScanDepositsOptions = {
   client: ToncenterClient;
   depositAddress: string;
@@ -23,17 +25,25 @@ export async function scanDeposits(options: ScanDepositsOptions): Promise<{
   const matches: DepositMatch[] = [];
 
   for (let seqno = fromSeqno; seqno <= currentMasterSeqno; seqno += 1) {
-    const block = await options.client.transactionsByMasterchainBlock(seqno);
-    const transactions = block.transactions ?? [];
-    for (const tx of transactions) {
-      if (isDepositTransaction(tx, {
-        depositAddress: options.depositAddress,
-        requireNotAborted: options.requireNotAborted,
-      })) {
-        const match = toDepositMatch(tx);
-        matches.push(match);
-        options.onMatch?.(match);
+    for (let offset = 0; ; offset += TRANSACTIONS_PAGE_LIMIT) {
+      const block = await options.client.transactionsByMasterchainBlock(seqno, {
+        limit: TRANSACTIONS_PAGE_LIMIT,
+        offset,
+      });
+      const transactions = block.transactions ?? [];
+
+      for (const tx of transactions) {
+        if (isDepositTransaction(tx, {
+          depositAddress: options.depositAddress,
+          requireNotAborted: options.requireNotAborted,
+        })) {
+          const match = toDepositMatch(tx);
+          matches.push(match);
+          options.onMatch?.(match);
+        }
       }
+
+      if (transactions.length < TRANSACTIONS_PAGE_LIMIT) break;
     }
     writeCheckpoint(options.checkpointPath, seqno);
   }

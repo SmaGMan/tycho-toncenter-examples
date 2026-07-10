@@ -8,6 +8,11 @@ import type {
 
 type QueryValue = string | number | boolean | undefined;
 
+export type TransactionsByMasterchainBlockOptions = {
+  limit?: number;
+  offset?: number;
+};
+
 export class ToncenterClient {
   readonly endpoint: string;
 
@@ -19,8 +24,15 @@ export class ToncenterClient {
     return this.getJson("/toncenter/v3/masterchainInfo");
   }
 
-  async transactionsByMasterchainBlock(seqno: number): Promise<TransactionsByMasterchainBlock> {
-    return this.getJson("/toncenter/v3/transactionsByMasterchainBlock", { seqno });
+  async transactionsByMasterchainBlock(
+    seqno: number,
+    options: TransactionsByMasterchainBlockOptions = {},
+  ): Promise<TransactionsByMasterchainBlock> {
+    return this.getJson("/toncenter/v3/transactionsByMasterchainBlock", {
+      seqno,
+      limit: options.limit,
+      offset: options.offset,
+    });
   }
 
   async transactionsByAccount(address: string, limit = 50): Promise<TransactionsByAccount> {

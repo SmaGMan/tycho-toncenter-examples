@@ -44,9 +44,10 @@ npm run config:signature-id:standalone
 ## Deposit Watcher
 
 The watcher starts from `/toncenter/v3/masterchainInfo` and scans
-`/toncenter/v3/transactionsByMasterchainBlock`. A transaction matches when its
-non-bounced inbound message and account equal the deposit address and it has no
-outbound messages. Matches are printed immediately as JSON lines.
+`/toncenter/v3/transactionsByMasterchainBlock`, paginating each masterchain
+block before the checkpoint advances. A transaction matches when its non-bounced
+inbound message and account equal the deposit address and it has no outbound
+messages. Matches are printed immediately as JSON lines.
 
 One scan:
 
@@ -320,8 +321,8 @@ masterchain block.
 #### `--checkpoint <path>`
 
 Reads and writes a JSON file containing `lastProcessedMasterSeqno`. The file is
-updated after each processed masterchain block, so a later run can resume from
-the next block. Omit this option for a stateless scan.
+updated after all transaction pages for a masterchain block are processed, so a
+later run can resume from the next block. Omit this option for a stateless scan.
 
 #### `--poll-ms <milliseconds>`
 
