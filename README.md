@@ -5,7 +5,7 @@ TypeScript examples for Tycho testnet:
 - blockchain `signature_id` discovery;
 - deposit tracking by masterchain block;
 - native withdraw from EverWallet and multisig2 through direct JRPC or a signed BOC sent to toncenter;
-- wallet-v5 r1 BOC formation with `@ton/core` and toncenter broadcast.
+- wallet-v5 r1 address derivation and BOC formation with `@ton/core`.
 
 Default endpoints:
 
@@ -224,6 +224,31 @@ Both commands print one of these statuses:
 - `confirmed`: this confirmation was accepted, but more signatures are required.
 - `not_observed`: the transaction was not found before message expiration; inspect pending state before retrying.
 
+## `@ton/core` Wallet V5 Address
+
+Compute a wallet-v5 r1 raw address locally from a public key or an Ed25519
+secret key. This command does not sign, broadcast, or call an RPC endpoint.
+
+```bash
+npm run utils:wallet-v5-address -- \
+  --public-key <64-hex-ed25519-public-key>
+```
+
+Or derive the public key from a 128-hex Ed25519 secret key:
+
+```bash
+npm run utils:wallet-v5-address -- \
+  --secret-key <128-hex-ed25519-secret-key>
+```
+
+Pass exactly one of `--public-key` or `--secret-key`. The secret key is used
+only locally to derive and validate the public key, and is never printed.
+
+`--workchain` defaults to `0`, `--network-global-id` defaults to `-239`, and
+`--subwallet-number` defaults to `0`. All three participate in address
+derivation. `--signature-id` is intentionally not an argument: it affects a
+signed message, not the wallet address.
+
 ## `@ton/core` Wallet V5 Withdraw
 
 This command builds a wallet-v5 r1 external message with `@ton/core` and sends
@@ -352,17 +377,19 @@ recomputes the expected sender address and rejects a mismatch before broadcast.
 
 Signing key. EverWallet and multisig2 commands accept a hexadecimal secret key
 and can read it from `EVERWALLET_SECRET_KEY` or `MSIG2_SECRET_KEY`.
-Wallet-v5 requires a 64-byte Ed25519 secret key (`private || public`) encoded as
-128 hexadecimal characters or base64 and can read it from
-`TON_WALLET_SECRET_KEY`.
+Wallet-v5 withdraw accepts a 64-byte Ed25519 secret key (`private || public`)
+encoded as 128 hexadecimal characters or base64 and can read it from
+`TON_WALLET_SECRET_KEY`. `utils:wallet-v5-address` accepts the 128-hex form as
+an alternative to `--public-key` and never prints it.
 
 The secret key is used locally and is not sent as an API parameter.
 
 #### `--public-key <64-hex>`
 
-EverWallet and multisig2 signer public key, exactly 32 bytes in hexadecimal.
-Normally omit it: the command derives it from `--secret-key`. Supply it only
-when an explicit public key is required for state-init or signer selection.
+EverWallet and multisig2 signer public key, or the wallet-v5 address public
+key, exactly 32 bytes in hexadecimal.
+EverWallet and multisig2 commands normally derive it from `--secret-key`;
+`utils:wallet-v5-address` accepts it as an alternative to `--secret-key`.
 
 For direct multisig2 commands, the selected public key must appear in
 `getCustodians`; otherwise the command fails before sending.

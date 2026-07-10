@@ -44,17 +44,32 @@ export type BuiltTonCoreWalletV5Boc = {
   subwalletNumber: number;
 };
 
+export type TonCoreWalletV5AddressParams = {
+  publicKey: Buffer;
+  workchain?: number;
+  networkGlobalId?: number;
+  subwalletNumber?: number;
+};
+
 export async function buildTonCoreWalletV5Boc(
   client: ToncenterClient,
   params: TonCoreWalletV5WithdrawParams,
 ): Promise<BuiltTonCoreWalletV5Boc> {
   const keyPair = keyPairFromSecretKey(params.secretKey);
-  const workchain = params.workchain ?? 0;
-  const networkGlobalId = params.networkGlobalId;
-  const subwalletNumber = params.subwalletNumber ?? 0;
-  const walletId = { networkGlobalId, workchain, subwalletNumber };
-  const walletInit = makeWalletV5StateInit(keyPair.publicKey, walletId);
-  const computedWallet = contractAddress(workchain, walletInit);
+  const derivedWallet = deriveTonCoreWalletV5Address({
+    publicKey: keyPair.publicKey,
+    workchain: params.workchain,
+    networkGlobalId: params.networkGlobalId,
+    subwalletNumber: params.subwalletNumber,
+  });
+  const {
+    workchain,
+    networkGlobalId,
+    subwalletNumber,
+    walletId,
+    stateInit: walletInit,
+    address: computedWallet,
+  } = derivedWallet;
   const wallet = params.wallet ? Address.parse(params.wallet) : computedWallet;
 
   if (params.wallet && wallet.toRawString() !== computedWallet.toRawString()) {
@@ -106,6 +121,10 @@ export async function sendTonCoreWalletV5BocViaToncenter(
   return { message, result };
 }
 
+export function computeTonCoreWalletV5Address(params: TonCoreWalletV5AddressParams): string {
+  return deriveTonCoreWalletV5Address(params).address.toRawString();
+}
+
 async function readWalletSeqno(client: ToncenterClient, wallet: Address): Promise<number> {
   const result = await client.runGetMethod(wallet.toRawString(), "seqno");
   return readSeqnoFromRunGetMethod(result);
@@ -116,6 +135,43 @@ type WalletV5Id = {
   workchain: number;
   subwalletNumber: number;
 };
+
+function deriveTonCoreWalletV5Address(params: TonCoreWalletV5AddressParams): {
+  address: Address;
+  stateInit: StateInit;
+  walletId: WalletV5Id;
+  workchain: number;
+  networkGlobalId: number;
+  subwalletNumber: number;
+} {
+  if (params.publicKey.length !== 32) {
+    throw new Error(`wallet-v5 public key must be 32 bytes, got ${params.publicKey.length}`);
+  }
+
+  const workchain = params.workchain ?? 0;
+  const networkGlobalId = params.networkGlobalId ?? -239;
+  const subwalletNumber = params.subwalletNumber ?? 0;
+  assertIntegerInRange("wallet-v5 workchain", workchain, -128, 127);
+  assertIntegerInRange("wallet-v5 network global id", networkGlobalId, -0x80000000, 0x7fffffff);
+  assertIntegerInRange("wallet-v5 subwallet number", subwalletNumber, 0, 0x7fff);
+
+  const walletId = { networkGlobalId, workchain, subwalletNumber };
+  const stateInit = makeWalletV5StateInit(params.publicKey, walletId);
+  return {
+    address: contractAddress(workchain, stateInit),
+    stateInit,
+    walletId,
+    workchain,
+    networkGlobalId,
+    subwalletNumber,
+  };
+}
+
+function assertIntegerInRange(name: string, value: number, min: number, max: number): void {
+  if (!Number.isInteger(value) || value < min || value > max) {
+    throw new Error(`${name} must be an integer from ${min} to ${max}`);
+  }
+}
 
 function makeWalletV5StateInit(publicKey: Buffer, walletId: WalletV5Id): StateInit {
   const data = beginCell()

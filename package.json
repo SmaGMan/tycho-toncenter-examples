@@ -5,6 +5,7 @@
     "config:signature-id": "ts-node scripts/config/signature-id.ts",
     "config:signature-id:standalone": "ts-node scripts/config/signature-id-standalone.ts",
     "deposit:watch": "ts-node scripts/deposit/watch.ts",
+    "utils:wallet-v5-address": "ts-node scripts/withdraw/wallet-v5-address.ts",
     "withdraw:standalone:direct": "ts-node scripts/withdraw/standalone-direct.ts",
     "withdraw:standalone:boc": "ts-node scripts/withdraw/standalone-boc.ts",
     "withdraw:msig2:direct": "ts-node scripts/withdraw/msig2-direct.ts",
