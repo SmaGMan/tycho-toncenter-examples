@@ -10,7 +10,7 @@ runMain(async () => {
   const transactions = await getMsig2PendingTransactionsViaToncenter(parseToncenterClient(args), wallet, limit);
   printJson({
     transport: "toncenter v3 transactions",
-    wallet: "msig2",
+    wallet,
     transactions: transactions.map(({ transactionId, transaction }) => ({
       transactionId,
       transactionHash: transaction.hash,

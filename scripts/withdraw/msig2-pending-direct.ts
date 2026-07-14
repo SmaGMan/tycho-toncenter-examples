@@ -9,7 +9,7 @@ runMain(async () => {
   const transactions = await getMsig2PendingTransactions(params);
   printJson({
     transport: "everscale-standalone-client direct JRPC",
-    wallet: "msig2",
+    wallet: params.wallet,
     transactions,
   });
 });

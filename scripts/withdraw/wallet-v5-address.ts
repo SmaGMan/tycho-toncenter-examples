@@ -3,7 +3,7 @@ import { keyPairFromSeed } from "@ton/crypto";
 import { Args, hexArg } from "../../src/cli/args";
 import { runMain } from "../../src/cli/errors";
 import { printJson } from "../../src/cli/format";
-import { computeTonCoreWalletV5Address } from "../../src/withdraw/ton-core-wallet-v5";
+import { computeTonCoreWalletV5Address } from "../../src/withdraw/ton-core-wallet-v5-offline";
 
 runMain(async () => {
   const args = new Args();

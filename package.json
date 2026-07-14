@@ -8,13 +8,21 @@
     "utils:wallet-v5-address": "ts-node scripts/withdraw/wallet-v5-address.ts",
     "withdraw:standalone:direct": "ts-node scripts/withdraw/standalone-direct.ts",
     "withdraw:standalone:boc": "ts-node scripts/withdraw/standalone-boc.ts",
+    "withdraw:standalone:boc:prepare": "ts-node scripts/withdraw/standalone-boc-prepare.ts",
+    "withdraw:standalone:boc:send": "ts-node scripts/withdraw/standalone-boc-send.ts",
     "withdraw:msig2:direct": "ts-node scripts/withdraw/msig2-direct.ts",
     "withdraw:msig2:boc": "ts-node scripts/withdraw/msig2-boc.ts",
+    "withdraw:msig2:boc:prepare": "ts-node scripts/withdraw/msig2-boc-prepare.ts",
+    "withdraw:msig2:boc:send": "ts-node scripts/withdraw/msig2-boc-send.ts",
     "withdraw:msig2:confirm:direct": "ts-node scripts/withdraw/msig2-confirm-direct.ts",
     "withdraw:msig2:confirm:boc": "ts-node scripts/withdraw/msig2-confirm-boc.ts",
+    "withdraw:msig2:confirm:boc:prepare": "ts-node scripts/withdraw/msig2-confirm-boc-prepare.ts",
+    "withdraw:msig2:confirm:boc:send": "ts-node scripts/withdraw/msig2-confirm-boc-send.ts",
     "withdraw:msig2:pending:direct": "ts-node scripts/withdraw/msig2-pending-direct.ts",
     "withdraw:msig2:pending:toncenter": "ts-node scripts/withdraw/msig2-pending-toncenter.ts",
     "withdraw:ton-core:boc": "ts-node scripts/withdraw/ton-core-boc.ts",
+    "withdraw:ton-core:boc:prepare": "ts-node scripts/withdraw/ton-core-boc-prepare.ts",
+    "withdraw:ton-core:boc:send": "ts-node scripts/withdraw/ton-core-boc-send.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -23,7 +31,8 @@
     "dotenv": "^16.4.5",
     "everscale-crypto": "^0.1.1",
     "everscale-inpage-provider": "^0.3.59",
-    "everscale-standalone-client": "2.1.23"
+    "everscale-standalone-client": "2.1.23",
+    "nekoton-wasm": "npm:nekoton-wasm-locklift@1.26.0-beta.0"
   },
   "devDependencies": {
     "@types/node": "^20.11.30",
