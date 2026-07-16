@@ -41,6 +41,102 @@ npm run config:signature-id:standalone
 - `--rpc <url>` overrides `TYCHO_TESTNET_RPC`.
 - `--config-boc <base64> --global-id <number>` parses an already fetched config BOC.
 
+## Compute Wallet Addresses
+
+This utility computes addresses locally. It does not sign, broadcast, or call
+an RPC endpoint.
+
+Compute EverWallet addresses in workchains `-1` and `0` from a public key:
+
+```bash
+npm run utils:wallet-address -- --public-key <public-key>
+```
+
+From a private key:
+
+```bash
+npm run utils:wallet-address -- --secret-key <secret-key>
+```
+
+Or read the private key from a UTF-8 text file:
+
+```bash
+npm run utils:wallet-address -- --secret-file ./wallet.secret
+```
+
+`--secret-key` accepts either a 64-hex private seed or a 128-hex TON Ed25519
+secret key in `private + public` format. `--secret-file` accepts the same two
+formats. Leading and trailing whitespace in the file is ignored.
+
+From a seed phrase:
+
+```bash
+npm run utils:wallet-address -- --seed "<seed phrase>" --account 0
+```
+
+Or read the seed phrase from a UTF-8 text file:
+
+```bash
+npm run utils:wallet-address -- --seed-file ./wallet.seed --account 0
+```
+
+`--account` selects the BIP39 account index for `--seed` or `--seed-file`.
+Default: `0`. Leading and trailing whitespace in the file is ignored.
+
+Pass exactly one key source: `--seed`, `--seed-file`, `--secret-key`,
+`--secret-file`, or `--public-key`.
+
+Add `--nonce <uint32>` only when you need another EverWallet address variant
+for the same public key. Omit it for the standard Tycho wallet address shape.
+
+Compute a TON wallet-v5 r1 address instead of EverWallet:
+
+```bash
+npm run utils:wallet-address -- --secret-key <secret-key> --wallet-v5
+```
+
+Wallet-v5 keeps a single `--secret-key` argument and accepts either secret-key
+representation:
+
+- 64 hex characters: a 32-byte private seed; the public key is derived.
+- 128 hex characters: a 32-byte private seed followed by its 32-byte public
+  key; the supplied public half is validated.
+
+Use `--secret-file <path>` instead of `--secret-key` to read either representation
+from a file:
+
+```bash
+npm run utils:wallet-address -- --secret-file ./wallet.secret --wallet-v5
+```
+
+Wallet-v5 options:
+
+- `--workchain <number>` defaults to `0`.
+- `--network-global-id <number>` defaults to `-239`.
+- `--subwallet-number <number>` defaults to `0`.
+
+`--nonce` is not used for wallet-v5 addresses. The script derives the public
+key from seed or private-key input, including their file variants, so a 64-hex
+private key is enough to compute the address.
+
+Private keys are not printed by default. When seed or private-key input is
+used, including their file variants, the script prints the public key first and
+then the addresses.
+
+Add `--print-secret-key` to print both secret key formats:
+
+```bash
+npm run utils:wallet-address -- --seed "<seed phrase>" --account 0 --print-secret-key
+```
+
+With `--print-secret-key`, the script prints:
+
+- `private`: the ordinary 64-hex EverWallet secret key.
+- `ton ed25519 secret`: the 128-hex TON Ed25519 secret key for wallet-v5 usage.
+
+`--print-secret-key` is ignored when the script is run with `--public-key`, because
+the secret key cannot be recovered from a public key.
+
 ## Deposit Watcher
 
 The watcher starts from `/toncenter/v3/masterchainInfo` and scans
@@ -396,31 +492,6 @@ For its delivery outcome, it uses the same `status`, `observation`, and
 `not_observed` result means the transaction was not found before message
 expiration; inspect pending state before retrying.
 
-## `@ton/core` Wallet V5 Address
-
-Compute a wallet-v5 r1 raw address locally from a public key or an Ed25519
-secret key. This command does not sign, broadcast, or call an RPC endpoint.
-
-```bash
-npm run utils:wallet-v5-address -- \
-  --public-key <64-hex-ed25519-public-key>
-```
-
-Or derive the public key from a 128-hex Ed25519 secret key:
-
-```bash
-npm run utils:wallet-v5-address -- \
-  --secret-key <128-hex-ed25519-secret-key>
-```
-
-Pass exactly one of `--public-key` or `--secret-key`. The secret key is used
-only locally to derive and validate the public key, and is never printed.
-
-`--workchain` defaults to `0`, `--network-global-id` defaults to `-239`, and
-`--subwallet-number` defaults to `0`. All three participate in address
-derivation. `--signature-id` is intentionally not an argument: it affects a
-signed message, not the wallet address.
-
 ## `@ton/core` Wallet V5 Withdraw
 
 Prepare a wallet-v5 r1 external message completely offline with `@ton/core`.
@@ -661,8 +732,9 @@ Signing key. EverWallet and multisig2 commands accept a hexadecimal secret key
 and can read it from `EVERWALLET_SECRET_KEY` or `MSIG2_SECRET_KEY`.
 Wallet-v5 withdraw accepts a 64-byte Ed25519 secret key (`private || public`)
 encoded as 128 hexadecimal characters or base64 and can read it from
-`TON_WALLET_SECRET_KEY`. `utils:wallet-v5-address` accepts the 128-hex form as
-an alternative to `--public-key` and never prints it.
+`TON_WALLET_SECRET_KEY`. `utils:wallet-address` instead accepts 64-hex private
+seeds and 128-hex `private || public` keys through `--secret-key` or
+`--secret-file`.
 
 The secret key is used locally and is not sent as an API parameter. It is not
 read by any separate `*:boc:send` command.
@@ -672,7 +744,7 @@ read by any separate `*:boc:send` command.
 EverWallet and multisig2 signer public key, or the wallet-v5 address public
 key, exactly 32 bytes in hexadecimal.
 EverWallet and multisig2 commands normally derive it from `--secret-key`;
-`utils:wallet-v5-address` accepts it as an alternative to `--secret-key`.
+`utils:wallet-address` accepts it through `--public-key`.
 
 For direct multisig2 commands, the selected public key must appear in
 `getCustodians`; otherwise the command fails before sending.

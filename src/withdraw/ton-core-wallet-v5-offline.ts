@@ -126,17 +126,13 @@ export function buildTonCoreWalletV5Boc(
   };
 }
 
-export function computeTonCoreWalletV5Address(params: TonCoreWalletV5AddressParams): string {
-  return deriveTonCoreWalletV5Address(params).address.toRawString();
-}
-
 type WalletV5Id = {
   networkGlobalId: number;
   workchain: number;
   subwalletNumber: number;
 };
 
-function deriveTonCoreWalletV5Address(params: TonCoreWalletV5AddressParams): {
+export function deriveTonCoreWalletV5Address(params: TonCoreWalletV5AddressParams): {
   address: Address;
   stateInit: StateInit;
   walletId: WalletV5Id;

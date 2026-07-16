@@ -4,7 +4,7 @@ import { keyPairFromSecretKey } from "@ton/crypto";
 import { ToncenterClient, readSeqnoFromRunGetMethod } from "../toncenter/client";
 import type { ToncenterTransaction } from "../toncenter/types";
 import {
-  computeTonCoreWalletV5Address,
+  deriveTonCoreWalletV5Address,
   type TonCoreWalletV5WithdrawParams,
 } from "./ton-core-wallet-v5-offline";
 import { waitForToncenterExternalMessageSubmission } from "./toncenter-external-boc";
@@ -93,12 +93,12 @@ export async function waitForTonCoreWalletV5Submission(
 
 function resolveTonCoreWalletV5Wallet(params: TonCoreWalletV5WithdrawParams): string {
   const publicKey = keyPairFromSecretKey(params.secretKey).publicKey;
-  const computedWallet = computeTonCoreWalletV5Address({
+  const computedWallet = deriveTonCoreWalletV5Address({
     publicKey,
     workchain: params.workchain,
     networkGlobalId: params.networkGlobalId,
     subwalletNumber: params.subwalletNumber,
-  });
+  }).address.toRawString();
   const wallet = params.wallet ? Address.parse(params.wallet).toRawString() : computedWallet;
 
   if (wallet !== computedWallet) {

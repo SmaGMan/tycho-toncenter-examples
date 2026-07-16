@@ -9,10 +9,8 @@ import {
   waitForTonCoreWalletV5Submission,
 } from "./ton-core-wallet-v5-online";
 
-export { computeTonCoreWalletV5Address } from "./ton-core-wallet-v5-offline";
 export type {
   BuiltTonCoreWalletV5Boc,
-  TonCoreWalletV5AddressParams,
   TonCoreWalletV5WithdrawParams,
 } from "./ton-core-wallet-v5-offline";
 export {
