@@ -10,46 +10,60 @@ import {
   type MultisigWalletWithdrawParams,
 } from "./multisig-standalone-offline";
 
-export type Msig2SignerParams = MultisigSignerParams;
-export type Msig2WalletWithdrawParams = MultisigWalletWithdrawParams;
-export type Msig2ConfirmParams = MultisigConfirmParams;
-export type Msig2Method = MultisigMethod;
-export type Msig2Call = MultisigCall;
-export type BuiltMsigWalletBoc = BuiltMultisigWalletBoc;
+export type SafeMultisigSignerParams = MultisigSignerParams;
+export type SafeMultisigWalletWithdrawParams = MultisigWalletWithdrawParams;
+export type SafeMultisigConfirmParams = MultisigConfirmParams;
+export type SafeMultisigMethod = MultisigMethod;
+export type SafeMultisigCall = MultisigCall;
+export type BuiltSafeMultisigWalletBoc = BuiltMultisigWalletBoc;
 
 /**
- * Builds and signs multisig2 external messages with local crypto and bundled
- * Nekoton WASM only. No transport or account-state request is created here.
+ * Builds and signs SafeMultisig external messages with local crypto and the
+ * bundled Nekoton WASM only. No transport or account-state request is created.
  */
-export function buildMsig2WalletBoc(params: Msig2WalletWithdrawParams): BuiltMsigWalletBoc {
-  return buildMultisigBoc(MSIG2_SPEC, params, makeMsig2WithdrawCall(params));
+export function buildSafeMultisigWalletBoc(
+  params: SafeMultisigWalletWithdrawParams,
+): BuiltSafeMultisigWalletBoc {
+  return buildMultisigBoc(SAFEMULTISIG_SPEC, params, makeSafeMultisigWithdrawCall(params));
 }
 
-export function buildMsig2ConfirmBoc(params: Msig2ConfirmParams): BuiltMsigWalletBoc {
-  return buildMultisigBoc(MSIG2_SPEC, params, makeMsig2ConfirmCall(params));
+export function buildSafeMultisigConfirmBoc(
+  params: SafeMultisigConfirmParams,
+): BuiltSafeMultisigWalletBoc {
+  return buildMultisigBoc(SAFEMULTISIG_SPEC, params, makeSafeMultisigConfirmCall(params));
 }
 
-export function makeMsig2WithdrawCall(params: Msig2WalletWithdrawParams): Msig2Call {
-  return makeMultisigWithdrawCall(MSIG2_SPEC, params);
+export function makeSafeMultisigWithdrawCall(
+  params: SafeMultisigWalletWithdrawParams,
+): SafeMultisigCall {
+  return makeMultisigWithdrawCall(SAFEMULTISIG_SPEC, params);
 }
 
-export function makeMsig2ConfirmCall(params: Msig2ConfirmParams): Msig2Call {
+export function makeSafeMultisigConfirmCall(
+  params: SafeMultisigConfirmParams,
+): SafeMultisigCall {
   return makeMultisigConfirmCall(params);
 }
 
-export const MSIG2_ABI = `{
+/** ABI of the legacy SafeMultisigWallet contract. */
+export const SAFEMULTISIG_ABI = `{
   "ABI version": 2,
-  "version": "2.3",
   "header": ["pubkey", "time", "expire"],
   "functions": [{
+    "name": "constructor",
+    "inputs": [
+      {"name":"owners","type":"uint256[]"},
+      {"name":"reqConfirms","type":"uint8"}
+    ],
+    "outputs": []
+  }, {
     "name": "submitTransaction",
     "inputs": [
       {"name":"dest","type":"address"},
       {"name":"value","type":"uint128"},
       {"name":"bounce","type":"bool"},
       {"name":"allBalance","type":"bool"},
-      {"name":"payload","type":"cell"},
-      {"name":"stateInit","type":"optional(cell)"}
+      {"name":"payload","type":"cell"}
     ],
     "outputs": [
       {"name":"transId","type":"uint64"}
@@ -88,16 +102,19 @@ export const MSIG2_ABI = `{
         {"name":"value","type":"uint128"},
         {"name":"sendFlags","type":"uint16"},
         {"name":"payload","type":"cell"},
-        {"name":"bounce","type":"bool"},
-        {"name":"stateInit","type":"optional(cell)"}
+        {"name":"bounce","type":"bool"}
       ]
     }]
   }],
   "events": []
 }`;
 
-export const MSIG2_SPEC = {
-  name: "multisig2",
-  abi: MSIG2_ABI,
-  submitStateInit: true,
+export const SAFEMULTISIG_SPEC = {
+  name: "SafeMultisig",
+  abi: SAFEMULTISIG_ABI,
+  submitStateInit: false,
+  minimumAmount: {
+    nano: 1_000_000n,
+    display: "0.001",
+  },
 } as const;

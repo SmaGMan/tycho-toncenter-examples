@@ -5,6 +5,8 @@ import {
   parseEverWalletDirectArgs,
   parseMsig2DirectConfirmArgs,
   parseMsig2WalletDirectArgs,
+  parseSafeMultisigDirectConfirmArgs,
+  parseSafeMultisigWalletDirectArgs,
   requireArgOrEnv,
 } from "./parse-offline";
 
@@ -30,15 +32,45 @@ export function parseMsig2ConfirmDirectArgs(args = new Args()) {
 }
 
 export function parseMsig2PendingDirectArgs(args = new Args()) {
+  return parseMultisigPendingDirectArgs(args, "MSIG2_WALLET_ADDRESS");
+}
+
+export function parseMsig2PendingToncenterArgs(args = new Args()) {
+  return parseMultisigPendingToncenterArgs(args, "MSIG2_WALLET_ADDRESS");
+}
+
+export function parseSafeMultisigStandaloneDirectArgs(args = new Args()) {
   return {
-    wallet: requireArgOrEnv(args, "wallet", "MSIG2_WALLET_ADDRESS"),
+    ...parseSafeMultisigWalletDirectArgs(args),
     rpcEndpoint: tychoRpcEndpoint(args.get("rpc")),
   };
 }
 
-export function parseMsig2PendingToncenterArgs(args = new Args()) {
+export function parseSafeMultisigConfirmDirectArgs(args = new Args()) {
   return {
-    wallet: requireArgOrEnv(args, "wallet", "MSIG2_WALLET_ADDRESS"),
+    ...parseSafeMultisigDirectConfirmArgs(args),
+    rpcEndpoint: tychoRpcEndpoint(args.get("rpc")),
+  };
+}
+
+export function parseSafeMultisigPendingDirectArgs(args = new Args()) {
+  return parseMultisigPendingDirectArgs(args, "SAFEMULTISIG_WALLET_ADDRESS");
+}
+
+export function parseSafeMultisigPendingToncenterArgs(args = new Args()) {
+  return parseMultisigPendingToncenterArgs(args, "SAFEMULTISIG_WALLET_ADDRESS");
+}
+
+function parseMultisigPendingDirectArgs(args: Args, walletEnv: string) {
+  return {
+    wallet: requireArgOrEnv(args, "wallet", walletEnv),
+    rpcEndpoint: tychoRpcEndpoint(args.get("rpc")),
+  };
+}
+
+function parseMultisigPendingToncenterArgs(args: Args, walletEnv: string) {
+  return {
+    wallet: requireArgOrEnv(args, "wallet", walletEnv),
     limit: args.positiveInt("limit") ?? 50,
   };
 }

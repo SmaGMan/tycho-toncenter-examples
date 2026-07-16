@@ -2,6 +2,21 @@ import { Args, base64OrHexToBuffer, hexArg } from "../cli/args";
 import { envOrArg } from "../cli/env";
 import { toNanoString } from "./amount";
 
+type MultisigEnv = {
+  wallet: string;
+  secretKey: string;
+};
+
+const MSIG2_ENV: MultisigEnv = {
+  wallet: "MSIG2_WALLET_ADDRESS",
+  secretKey: "MSIG2_SECRET_KEY",
+};
+
+const SAFEMULTISIG_ENV: MultisigEnv = {
+  wallet: "SAFEMULTISIG_WALLET_ADDRESS",
+  secretKey: "SAFEMULTISIG_SECRET_KEY",
+};
+
 export function parseEverWalletDirectArgs(args = new Args()) {
   rejectArgs(args, ["comment", "timeout", "signature-id", "include-state-init", "nonce"]);
   return parseEverWalletTransferArgs(args);
@@ -34,41 +49,48 @@ export function parseEverWalletWithdrawArgs(args = new Args()) {
 
 export function parseMsig2WalletDirectArgs(args = new Args()) {
   rejectArgs(args, ["signature-id"]);
-  return parseMsig2WalletTransferArgs(args);
-}
-
-function parseMsig2WalletTransferArgs(args: Args) {
-  return {
-    ...parseMsig2SignerArgs(args),
-    recipient: args.require("to"),
-    amountNano: toNanoString(args.require("amount")),
-    bounce: args.flag("bounce"),
-    comment: args.get("comment"),
-  };
+  return parseMultisigWalletTransferArgs(args, MSIG2_ENV);
 }
 
 export function parseMsig2WalletWithdrawArgs(args = new Args()) {
   return {
-    ...parseMsig2WalletTransferArgs(args),
+    ...parseMultisigWalletTransferArgs(args, MSIG2_ENV),
     signatureId: args.int("signature-id"),
   };
 }
 
 export function parseMsig2DirectConfirmArgs(args = new Args()) {
   rejectArgs(args, ["signature-id"]);
-  return parseMsig2ConfirmationArgs(args);
-}
-
-function parseMsig2ConfirmationArgs(args: Args) {
-  return {
-    ...parseMsig2SignerArgs(args),
-    transactionId: uint64StringArg("transaction-id", args.require("transaction-id")),
-  };
+  return parseMultisigConfirmationArgs(args, MSIG2_ENV);
 }
 
 export function parseMsig2ConfirmArgs(args = new Args()) {
   return {
-    ...parseMsig2ConfirmationArgs(args),
+    ...parseMultisigConfirmationArgs(args, MSIG2_ENV),
+    signatureId: args.int("signature-id"),
+  };
+}
+
+export function parseSafeMultisigWalletDirectArgs(args = new Args()) {
+  rejectArgs(args, ["signature-id"]);
+  return parseMultisigWalletTransferArgs(args, SAFEMULTISIG_ENV);
+}
+
+export function parseSafeMultisigWalletWithdrawArgs(args = new Args()) {
+  return {
+    ...parseMultisigWalletTransferArgs(args, SAFEMULTISIG_ENV),
+    signatureId: args.int("signature-id"),
+  };
+}
+
+export function parseSafeMultisigDirectConfirmArgs(args = new Args()) {
+  rejectArgs(args, ["signature-id"]);
+  return parseMultisigConfirmationArgs(args, SAFEMULTISIG_ENV);
+}
+
+export function parseSafeMultisigConfirmArgs(args = new Args()) {
+  return {
+    ...parseMultisigConfirmationArgs(args, SAFEMULTISIG_ENV),
     signatureId: args.int("signature-id"),
   };
 }
@@ -115,10 +137,27 @@ function uint64StringArg(name: string, value: string): string {
   return parsed.toString();
 }
 
-function parseMsig2SignerArgs(args: Args) {
-  const secretKey = requireArgOrEnv(args, "secret-key", "MSIG2_SECRET_KEY");
+function parseMultisigWalletTransferArgs(args: Args, env: MultisigEnv) {
   return {
-    wallet: requireArgOrEnv(args, "wallet", "MSIG2_WALLET_ADDRESS"),
+    ...parseMultisigSignerArgs(args, env),
+    recipient: args.require("to"),
+    amountNano: toNanoString(args.require("amount")),
+    bounce: args.flag("bounce"),
+    comment: args.get("comment"),
+  };
+}
+
+function parseMultisigConfirmationArgs(args: Args, env: MultisigEnv) {
+  return {
+    ...parseMultisigSignerArgs(args, env),
+    transactionId: uint64StringArg("transaction-id", args.require("transaction-id")),
+  };
+}
+
+function parseMultisigSignerArgs(args: Args, env: MultisigEnv) {
+  const secretKey = requireArgOrEnv(args, "secret-key", env.secretKey);
+  return {
+    wallet: requireArgOrEnv(args, "wallet", env.wallet),
     secretKey: hexArg("secret-key", secretKey),
     timeout: args.positiveInt("timeout"),
     publicKey: optionalHexArg(args, "public-key", 32),

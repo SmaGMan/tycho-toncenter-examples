@@ -4,7 +4,8 @@ TypeScript examples for Tycho testnet:
 
 - blockchain `signature_id` discovery;
 - deposit tracking by masterchain block;
-- native withdraw from EverWallet and multisig2 through direct JRPC, offline BOC preparation, or a signed BOC sent to toncenter;
+- SafeMultisig address derivation and deployment through direct JRPC or signed BOC workflows;
+- native withdraw from EverWallet, SafeMultisig, and multisig2 through direct JRPC, offline BOC preparation, or a signed BOC sent to toncenter;
 - wallet-v5 r1 address derivation, offline BOC preparation, and Toncenter submission with `@ton/core`.
 
 Default endpoints:
@@ -279,6 +280,251 @@ curl -sG "https://toncenter-testnet.tychoprotocol.com/toncenter/v2/getWalletInfo
   --data-urlencode "address=<wallet-address>" | jq
 ```
 
+## SafeMultisig Deployment
+
+The deployment commands use the official `SafeMultisigWallet.tvc` pinned to
+ton-labs-contracts commit
+`5ee039e4d093b91b6fdf7d77b9627e2e7d37f000`. Before every address derivation or
+constructor build, the script verifies both the TVC BOC hash and the expected
+code hash
+`80d6c47c4a25543c9b397b71716f3fae1e2c5d247174c52e2c19bd896442b105`.
+Artifact provenance is recorded in `artifacts/safemultisig/README.md`.
+
+First derive the deterministic address completely offline:
+
+```bash
+npm run deploy:safemultisig:address -- \
+  --public-key <deployer-public-key-hex> \
+  --workchain 0
+```
+
+The SafeMultisig address depends on the TVC, workchain, and deployer public key.
+The constructor's owners and confirmation threshold do not affect it. Fund the
+printed `wallet` address before sending the constructor message; the deployment
+script does not transfer funds to the future account.
+
+Deploy directly through JRPC after the future address is funded:
+
+```bash
+npm run deploy:safemultisig:direct -- \
+  --secret-key <deployer-secret-key-hex> \
+  --owners <owner-1-public-key>,<owner-2-public-key>,<owner-3-public-key> \
+  --required-confirmations 2
+```
+
+The direct command obtains signature configuration from JRPC, verifies that the
+future account has a positive balance and is not already deployed, sends the
+constructor with state init, and waits for its transaction. It reports
+`status: "accepted_by_jrpc"` with
+`observation: "included" | "aborted"`. Use `--rpc <url>` to override the Tycho
+JRPC endpoint. Do not pass `--signature-id` to this command.
+
+Prepare a signed 1-of-1 constructor BOC offline:
+
+```bash
+npm run --silent deploy:safemultisig:boc:prepare -- \
+  --secret-key <deployer-secret-key-hex> \
+  --signature-id 2000 \
+  --workchain 0 \
+  --timeout 300 > signed-safemultisig-deploy-boc.json
+```
+
+When `--owners` is omitted, the deployer public key is the only owner and the
+threshold defaults to one. For an M-of-N wallet, pass comma-separated custodian
+public keys and an explicit threshold:
+
+```bash
+npm run --silent deploy:safemultisig:boc:prepare -- \
+  --secret-key <deployer-secret-key-hex> \
+  --owners <owner-1-public-key>,<owner-2-public-key>,<owner-3-public-key> \
+  --required-confirmations 2 \
+  --signature-id 2000 \
+  --timeout 300 > signed-safemultisig-deploy-boc.json
+```
+
+The deployer key signs only the constructor and does not have to be one of the
+wallet owners. Transfer the artifact to an online machine and submit only the
+BOC:
+
+```bash
+npm run --silent deploy:safemultisig:boc:send -- \
+  --boc "$(jq -r '.message.boc' signed-safemultisig-deploy-boc.json)"
+```
+
+The online sender checks that the BOC contains state init with the pinned
+SafeMultisig code hash, that the destination matches that state init, and that
+the body decodes as the expected constructor. It then broadcasts through
+Toncenter and reports `observation: "included" | "aborted" | "not_observed"`.
+`accepted_by_toncenter` alone means only that the endpoint accepted the BOC;
+successful deployment requires `observation: "included"`.
+
+If the future address is already funded and offline transfer is unnecessary,
+the one-step compatibility command builds, sends, and observes the same BOC:
+
+```bash
+npm run deploy:safemultisig:boc -- \
+  --secret-key <deployer-secret-key-hex> \
+  --owners <owner-1-public-key>,<owner-2-public-key> \
+  --required-confirmations 2 \
+  --signature-id 2000
+```
+
+Deployment options:
+
+- `--public-key <hex>` computes an address without a secret key, or validates
+  the public key derived from `--secret-key` during BOC preparation.
+- `--secret-key <hex>` is the 32-byte deployer key; preparation can also read
+  it from `SAFEMULTISIG_SECRET_KEY`.
+- `--owners <key1,key2,...>` accepts 1 to 32 unique 32-byte public keys.
+- `--required-confirmations <count>` must be between one and the owner count;
+  it is required for multiple owners and defaults to one for a single owner.
+- `--workchain <id>` defaults to `0` and participates in address derivation.
+- `--signature-id <id>` sets the Nekoton signature id; verify the value for the
+  target network with `config:signature-id`.
+- `--timeout <seconds>` defaults to 60 seconds for locally signed BOCs and
+  controls their expiry.
+- `--rpc <url>` selects JRPC for the direct command; its timeout defaults to 30
+  seconds.
+- `--endpoint <url>` selects Toncenter for `:send` and the one-step command.
+
+Do not send the constructor BOC to an already deployed address. A prepared BOC
+is broadcast-capable until `message.expireAt`; keep it secret until it expires.
+
+## SafeMultisig Withdraw
+
+SafeMultisig uses the legacy multisig ABI. These commands call
+`submitTransaction`, which executes immediately for a 1-of-1 wallet and creates
+a pending transaction for an M-of-N wallet until its confirmation threshold is
+reached.
+
+Direct JRPC submit:
+
+```bash
+npm run withdraw:safemultisig:direct -- \
+  --wallet 0:<safemultisig-wallet-address> \
+  --secret-key <custodian-secret-key-hex> \
+  --to 0:<recipient> \
+  --amount 1.25
+```
+
+The direct path verifies the signing public key with `getCustodians` before
+sending. Its response separates `status: "accepted_by_jrpc"` from
+`observation: "included" | "aborted"` and includes `transactionId` when the
+wallet transaction was included.
+
+Prepare a signed submit BOC completely offline:
+
+```bash
+npm run --silent withdraw:safemultisig:boc:prepare -- \
+  --wallet 0:<safemultisig-wallet-address> \
+  --secret-key <custodian-secret-key-hex> \
+  --signature-id 2000 \
+  --to 0:<recipient> \
+  --amount 1.25 > signed-safemultisig-submit-boc.json
+```
+
+This produces `status: "prepared_offline"` and a `message` containing the BOC,
+hexadecimal hash, signed expiration, and public key. It performs no JRPC or
+Toncenter request, so it cannot check whether the key is a wallet custodian.
+
+Transfer the artifact to an online machine and submit only its BOC:
+
+```bash
+npm run --silent withdraw:safemultisig:boc:send -- \
+  --boc "$(jq -r '.message.boc' signed-safemultisig-submit-boc.json)"
+```
+
+The online command decodes and validates the expected SafeMultisig
+`submitTransaction` body, derives the wallet, message hash, and expiration from
+the BOC, broadcasts it through Toncenter, and observes the exact message in
+wallet history. This ABI check validates the method body but does not verify the
+destination account's contract code. The final response prints the decoded
+`input`, so the online side can inspect the destination, amount, bounce flag,
+and payload after submission. No `--wallet` or secret key is needed online. It
+reports `status: "accepted_by_toncenter"` and
+`observation: "included" | "aborted" | "not_observed"`.
+
+The one-step compatibility command builds, broadcasts, and observes the same
+BOC in one process:
+
+```bash
+npm run withdraw:safemultisig:boc -- \
+  --wallet 0:<safemultisig-wallet-address> \
+  --secret-key <custodian-secret-key-hex> \
+  --signature-id 2000 \
+  --to 0:<recipient> \
+  --amount 1.25
+```
+
+### SafeMultisig pending transactions
+
+Read current pending transactions directly from wallet state:
+
+```bash
+npm run withdraw:safemultisig:pending:direct -- \
+  --wallet 0:<safemultisig-wallet-address>
+```
+
+Or infer pending submissions from the selected Toncenter history window:
+
+```bash
+npm run withdraw:safemultisig:pending:toncenter -- \
+  --wallet 0:<safemultisig-wallet-address> \
+  --limit 50
+```
+
+Use the returned `id` or `transactionId` for another custodian's confirmation.
+The Toncenter command is a recovery helper; increase `--limit` when the submit
+or its executing confirmation may be outside the default 50 transactions.
+
+### Confirm SafeMultisig transaction
+
+Confirm through direct JRPC:
+
+```bash
+npm run withdraw:safemultisig:confirm:direct -- \
+  --wallet 0:<safemultisig-wallet-address> \
+  --secret-key <another-custodian-secret-key-hex> \
+  --transaction-id <pending-transaction-id>
+```
+
+Or prepare the signed confirmation offline and send it online:
+
+```bash
+npm run --silent withdraw:safemultisig:confirm:boc:prepare -- \
+  --wallet 0:<safemultisig-wallet-address> \
+  --secret-key <another-custodian-secret-key-hex> \
+  --signature-id 2000 \
+  --transaction-id <pending-transaction-id> \
+  > signed-safemultisig-confirm-boc.json
+
+npm run --silent withdraw:safemultisig:confirm:boc:send -- \
+  --boc "$(jq -r '.message.boc' signed-safemultisig-confirm-boc.json)"
+```
+
+The confirm sender derives the wallet and `transactionId` from the BOC. For an
+included confirmation, `confirmation: "executed"` means this message reached
+the threshold and emitted the internal transfer; `"confirmed"` means more
+signatures are required. The one-step alternative is
+`withdraw:safemultisig:confirm:boc` with the same arguments as `:prepare`.
+
+SafeMultisig options:
+
+- `--rpc <url>` selects JRPC for direct commands.
+- `--endpoint <url>` selects Toncenter for BOC send, one-step BOC, and history commands.
+- `--signature-id <id>` signs offline BOCs with the network signature id; use `2000` on Tycho testnet.
+- `--timeout <seconds>` changes external-message expiration.
+- `--public-key <hex>` optionally supplies the expected signer public key; it must match `--secret-key`.
+- `--comment <text>` adds a text payload to a submit.
+- `--bounce` enables bounce for the internal transfer.
+
+SafeMultisig rejects transfers below `0.001` native tokens; the scripts enforce
+the same minimum before signing or sending.
+
+The command-line wallet and key can also come from
+`SAFEMULTISIG_WALLET_ADDRESS` and `SAFEMULTISIG_SECRET_KEY`. SafeMultisig does
+not support the multisig2 `stateInit` parameter in an internal transfer.
+
 ## multisig2 Withdraw
 
 All multisig2 withdraw flows call `submitTransaction`, which supports
@@ -374,7 +620,7 @@ Options:
 - `--rpc <url>` selects JRPC for direct commands.
 - `--endpoint <url>` selects toncenter for BOC send, one-step BOC, and history commands; offline preparation does not read it.
 - `--boc <base64>` is required only by the separate `*:boc:send` commands.
-- `--public-key <hex>` overrides the key derived from `--secret-key`.
+- `--public-key <hex>` optionally supplies the expected signer public key; it must match `--secret-key`.
 - `--timeout <seconds>` changes external-message expiration.
 - `--signature-id <id>` sets the offline nekoton signature id; use `2000` on Tycho testnet.
 - `--comment <text>` adds a text payload to the withdraw.
@@ -615,6 +861,10 @@ EverWallet BOC send commands also emit `input`, decoded from the signed
 `sendTransaction` body, so the online side can inspect the destination, value,
 bounce flag, and payload represented by the submitted BOC.
 
+SafeMultisig submit BOC send commands emit the equivalent decoded `input` for
+their signed `submitTransaction` body. This value is printed in the final
+response after Toncenter submission.
+
 ## Detailed Argument Reference
 
 ### Transport and endpoint arguments
@@ -622,7 +872,8 @@ bounce flag, and payload represented by the submitted BOC.
 #### `--rpc <url>`
 
 Selects the Tycho JRPC endpoint used by direct standalone-client commands,
-`config:signature-id*`, and `withdraw:msig2:pending:direct`. It overrides
+`config:signature-id*`, `withdraw:safemultisig:pending:direct`, and
+`withdraw:msig2:pending:direct`. It overrides
 `TYCHO_TESTNET_RPC`; if neither is set, the default is
 `https://rpc-testnet.tychoprotocol.com`.
 
@@ -632,30 +883,37 @@ This option does not affect BOC broadcast commands: those use toncenter and
 #### `--endpoint <url>`
 
 Selects the toncenter instance used by the deposit watcher, BOC broadcast
-commands, and `withdraw:msig2:pending:toncenter`. It overrides
+commands, `withdraw:safemultisig:pending:toncenter`, and
+`withdraw:msig2:pending:toncenter`. It overrides
 `TYCHO_TESTNET_TONCENTER_ENDPOINT`; the default is
 `https://toncenter-testnet.tychoprotocol.com`.
 
 Use it for another network, a staging endpoint, or a local toncenter instance.
 It does not affect direct JRPC commands or the offline preparation commands
-`withdraw:standalone:boc:prepare`, `withdraw:msig2:boc:prepare`, and
+`deploy:safemultisig:boc:prepare`, `withdraw:standalone:boc:prepare`,
+`withdraw:safemultisig:boc:prepare`,
+`withdraw:safemultisig:confirm:boc:prepare`, `withdraw:msig2:boc:prepare`,
 `withdraw:msig2:confirm:boc:prepare`, and `withdraw:ton-core:boc:prepare`.
 
 #### `--boc <base64>`
 
-Required by `withdraw:standalone:boc:send`, `withdraw:msig2:boc:send`, and
-`withdraw:msig2:confirm:boc:send`, and `withdraw:ton-core:boc:send`. Pass the
+Required by `deploy:safemultisig:boc:send`, `withdraw:standalone:boc:send`, both
+SafeMultisig BOC send commands, both multisig2 BOC send commands, and
+`withdraw:ton-core:boc:send`. Pass the
 `message.boc` value emitted by the corresponding `*:boc:prepare` command; no
 wallet address, amount, or signing key is needed on the online machine. Treat
 this value as a signed, broadcast-capable transaction until its signed expiry:
 `message.expireAt` for Nekoton messages or `message.validUntil` for Wallet V5.
-For
-`withdraw:msig2:boc:send` and `withdraw:msig2:confirm:boc:send`, the wallet
-address, external-message hash, and signed expiration are parsed from the BOC
-before it is broadcast. `withdraw:standalone:boc:send` does the same after
+SafeMultisig and multisig2 BOC send commands parse the wallet address,
+external-message hash, signed expiration, method, and input from the BOC before
+it is broadcast. `withdraw:standalone:boc:send` does the same after
 validating an EverWallet `sendTransaction` BOC. `withdraw:ton-core:boc:send`
 does the same for its Wallet V5 header. Each uses that hash to observe the
 matching wallet transaction.
+
+`deploy:safemultisig:boc:send` additionally requires embedded state init,
+checks its code hash and destination, and decodes the SafeMultisig constructor
+owners and confirmation threshold before broadcast.
 
 ### Signature configuration arguments
 
@@ -682,6 +940,9 @@ commands rather than assuming the value for another network.
 Direct standalone-client commands obtain signature configuration from JRPC and
 do not accept this option. For wallet-v5, `signature-id` affects only the
 signature; it does not participate in wallet address derivation.
+
+For SafeMultisig deployment, the signature id affects the signed constructor
+message but does not participate in wallet address derivation.
 
 ### Deposit watcher arguments
 
@@ -718,18 +979,19 @@ conditions.
 
 #### `--wallet <address>`
 
-Sender wallet address. EverWallet and multisig2 commands can read it from
-`EVERWALLET_ADDRESS` and `MSIG2_WALLET_ADDRESS` respectively. Wallet-v5 can use
-`TON_WALLET_ADDRESS`; if it is omitted, the address is computed from the key and
-wallet id parameters.
+Sender wallet address. EverWallet, SafeMultisig, and multisig2 commands can read
+it from `EVERWALLET_ADDRESS`, `SAFEMULTISIG_WALLET_ADDRESS`, and
+`MSIG2_WALLET_ADDRESS` respectively. Wallet-v5 can use `TON_WALLET_ADDRESS`; if
+it is omitted, the address is computed from the key and wallet id parameters.
 
 When wallet-v5 or EverWallet BOC state-init parameters are present, the command
 recomputes the expected sender address and rejects a mismatch before broadcast.
 
 #### `--secret-key <key>`
 
-Signing key. EverWallet and multisig2 commands accept a hexadecimal secret key
-and can read it from `EVERWALLET_SECRET_KEY` or `MSIG2_SECRET_KEY`.
+Signing key. EverWallet, SafeMultisig, and multisig2 commands accept a
+hexadecimal secret key and can read it from `EVERWALLET_SECRET_KEY`,
+`SAFEMULTISIG_SECRET_KEY`, or `MSIG2_SECRET_KEY`.
 Wallet-v5 withdraw accepts a 64-byte Ed25519 secret key (`private || public`)
 encoded as 128 hexadecimal characters or base64 and can read it from
 `TON_WALLET_SECRET_KEY`. `utils:wallet-address` instead accepts 64-hex private
@@ -741,13 +1003,17 @@ read by any separate `*:boc:send` command.
 
 #### `--public-key <64-hex>`
 
-EverWallet and multisig2 signer public key, or the wallet-v5 address public
-key, exactly 32 bytes in hexadecimal.
-EverWallet and multisig2 commands normally derive it from `--secret-key`;
-`utils:wallet-address` accepts it through `--public-key`.
+EverWallet, SafeMultisig, or multisig2 signer public key, or the wallet-v5
+address public key, exactly 32 bytes in hexadecimal. The withdraw commands
+normally derive it from `--secret-key`; `utils:wallet-address` accepts it
+through `--public-key`.
 
-For direct multisig2 commands, the selected public key must appear in
-`getCustodians`; otherwise the command fails before sending.
+SafeMultisig and multisig2 commands reject an explicitly supplied public key
+when it does not match the public key derived from `--secret-key`. This check is
+performed before direct account-state requests or offline BOC construction.
+
+For direct SafeMultisig and multisig2 commands, the selected public key must
+appear in `getCustodians`; otherwise the command fails before sending.
 
 #### `--to <address>`
 
@@ -768,8 +1034,8 @@ withdrawals.
 #### `--comment <text>`
 
 Encodes a standard text-comment body (`uint32 0` followed by the UTF-8 text).
-It is available in EverWallet BOC, multisig2 withdraw, and wallet-v5 BOC
-commands. Omit it for an empty transfer payload.
+It is available in EverWallet BOC, SafeMultisig and multisig2 withdraw, and
+wallet-v5 BOC commands. Omit it for an empty transfer payload.
 
 ### EverWallet-specific arguments
 
@@ -803,32 +1069,29 @@ command uses standalone-client message handling and does not accept this CLI
 value. For offline transfer, choose a value that leaves enough time to send the
 artifact before `expireAt`.
 
-### multisig2-specific arguments
+### SafeMultisig and multisig2 arguments
 
 #### `--timeout <seconds>`
 
-Changes multisig2 external-message expiration. Direct JRPC commands default to
-30 seconds; BOCs built by `*:boc:prepare` and the one-step BOC commands default
-to 60 seconds. The one-step toncenter BOC path polls wallet history until
-expiration plus a short grace period. `withdraw:msig2:boc:send` reads the same
-signed expiration from the BOC and uses it for polling; it does not require a
-wallet argument. `withdraw:msig2:confirm:boc:send` does the same and returns
-the common observation plus its confirmation-specific result.
+Changes SafeMultisig or multisig2 external-message expiration. Direct JRPC
+commands default to 30 seconds; BOCs built by `*:boc:prepare` and the one-step
+BOC commands default to 60 seconds. Toncenter BOC paths poll wallet history
+until expiration plus a short grace period. Separate `*:boc:send` commands read
+the signed expiration from the BOC and do not require a wallet argument.
 
 #### `--transaction-id <uint64>`
 
-Required by `withdraw:msig2:confirm:direct`, `withdraw:msig2:confirm:boc`, and
-`withdraw:msig2:confirm:boc:prepare`. The separate
-`withdraw:msig2:confirm:boc:send` command needs only `--boc`. The value accepts
-decimal or `0x`-prefixed hexadecimal input and normalizes it to an unsigned
-64-bit decimal string. Obtain it from `withdraw:msig2:pending:direct`,
-`withdraw:msig2:pending:toncenter`, or the result of the initial submission.
+Required by SafeMultisig and multisig2 `confirm:direct`, `confirm:boc`, and
+`confirm:boc:prepare` commands. Separate `confirm:boc:send` commands need only
+`--boc`. The value accepts decimal or `0x`-prefixed hexadecimal input and
+normalizes it to an unsigned 64-bit decimal string. Obtain it from the matching
+`pending:direct`, `pending:toncenter`, or initial submission result.
 
 #### `--limit <count>`
 
-Applies to `withdraw:msig2:pending:toncenter` and controls how many recent
-wallet transactions are inspected. The default is `50`. Increase it if the
-submission is older than the current history window.
+Applies to SafeMultisig and multisig2 `pending:toncenter` commands and controls
+how many recent wallet transactions are inspected. The default is `50`.
+Increase it if the submission is older than the current history window.
 
 The toncenter command infers pending submissions from history; the direct
 pending command reads the wallet's current `getTransactions` state.
@@ -897,6 +1160,8 @@ TYCHO_TESTNET_TONCENTER_ENDPOINT=https://toncenter-testnet.tychoprotocol.com
 TYCHO_TESTNET_RPC=https://rpc-testnet.tychoprotocol.com
 EVERWALLET_ADDRESS=0:<wallet-address-hash>
 EVERWALLET_SECRET_KEY=<64-hex-secret-key>
+SAFEMULTISIG_WALLET_ADDRESS=0:<safemultisig-wallet-address-hash>
+SAFEMULTISIG_SECRET_KEY=<64-hex-secret-key>
 MSIG2_WALLET_ADDRESS=0:<msig2-wallet-address-hash>
 MSIG2_SECRET_KEY=<64-hex-secret-key>
 TON_WALLET_ADDRESS=0:<wallet-address-hash>
